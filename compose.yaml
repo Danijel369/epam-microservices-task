@@ -1,0 +1,30 @@
+services:
+  resource-db:
+    image: postgres:17-alpine
+    container_name: resource-db
+    environment:
+      POSTGRES_DB: resource_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d resource_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  song-db:
+    image: postgres:17-alpine
+    container_name: song-db
+    environment:
+      POSTGRES_DB: song_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d song_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
