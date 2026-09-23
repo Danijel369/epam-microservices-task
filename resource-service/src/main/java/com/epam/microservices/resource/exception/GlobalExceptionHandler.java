@@ -1,18 +1,37 @@
 package com.epam.microservices.resource.exception;
 
 import com.epam.microservices.resource.dto.ErrorResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
     @ExceptionHandler(InvalidFileFormatException.class)
     public ResponseEntity<ErrorResponse> handleInvalidFileFormat(InvalidFileFormatException ex) {
         return badRequest(ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidMp3Exception.class)
+    public ResponseEntity<ErrorResponse> handleInvalidMp3(InvalidMp3Exception ex) {
+        return badRequest(ex.getMessage());
+    }
+
+    /**
+     * An unreadable/empty request body (e.g. a {@code POST /resources} with no
+     * bytes) never reaches the controller; map it to a clear 400 rather than 500.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleUnreadableBody(HttpMessageNotReadableException ex) {
+        return badRequest("Invalid MP3 file: request body is empty");
     }
 
     @ExceptionHandler(InvalidIdException.class)
@@ -48,6 +67,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex) {
+        log.error("Unexpected error handling request", ex);
         return json(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ErrorResponse.of("Internal server error",
                         String.valueOf(HttpStatus.INTERNAL_SERVER_ERROR.value())));

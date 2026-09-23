@@ -1,6 +1,8 @@
 package com.epam.microservices.resource.service;
 
 import com.epam.microservices.resource.dto.Mp3Tags;
+import com.epam.microservices.resource.exception.InvalidMp3Exception;
+import org.apache.tika.Tika;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.metadata.TikaCoreProperties;
 import org.apache.tika.metadata.XMPDM;
@@ -23,14 +25,24 @@ import java.io.InputStream;
 public class Mp3MetadataExtractor {
 
     private static final Logger log = LoggerFactory.getLogger(Mp3MetadataExtractor.class);
+    private static final String MP3_MEDIA_TYPE = "audio/mpeg";
+
+    private final Tika tika = new Tika();
 
     public Mp3Tags extract(byte[] data) {
+        if (data == null || data.length == 0) {
+            throw new InvalidMp3Exception("Invalid MP3 file: request body is empty");
+        }
+        if (!MP3_MEDIA_TYPE.equals(detectContentType(data))) {
+            throw new InvalidMp3Exception("Invalid MP3 file: the uploaded content is not a valid MP3");
+        }
+
         Metadata metadata = new Metadata();
         try (InputStream stream = new ByteArrayInputStream(data)) {
             // BodyContentHandler(-1) disables the write limit so parsing never aborts.
             new Mp3Parser().parse(stream, new BodyContentHandler(-1), metadata, new ParseContext());
         } catch (Exception e) {
-            throw new IllegalStateException("Failed to read MP3 metadata", e);
+            throw new InvalidMp3Exception("Invalid MP3 file: the uploaded content is not a valid MP3");
         }
 
         String name = metadata.get(TikaCoreProperties.TITLE);
@@ -42,6 +54,19 @@ public class Mp3MetadataExtractor {
         log.info("Extracted MP3 tags: name='{}', artist='{}', album='{}', duration='{}', year='{}'",
                 name, artist, album, duration, year);
         return new Mp3Tags(name, artist, album, duration, year);
+    }
+
+    /**
+     * Detects the real media type of the bytes from their content (magic bytes),
+     * independent of any client-supplied header, so that garbage sent with an
+     * {@code audio/mpeg} header is recognised as not being an MP3.
+     */
+    private String detectContentType(byte[] data) {
+        try {
+            return tika.detect(data);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**
