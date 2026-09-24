@@ -22,10 +22,10 @@ public class SongEntity {
     @Column(name = "album", nullable = false, length = 100)
     private String album;
 
-    @Column(name = "duration", nullable = false)
+    @Column(name = "duration", nullable = false, length = 5)
     private String duration;
 
-    @Column(name = "release_year", nullable = false)
+    @Column(name = "release_year", nullable = false, length = 4)
     private String year;
 
     public Long getId() {
