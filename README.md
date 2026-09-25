@@ -9,71 +9,87 @@ A two-service system for MP3 file processing and song-metadata management.
 ## Tech stack
 
 - Java 17, Spring Boot 3.4.1, Maven (no Lombok, no Kotlin)
-- PostgreSQL 17 (Alpine) — one database per service, started via Docker Compose
-- Hibernate `ddl-auto=update` for schema management (no Flyway/Liquibase, no `schema.sql`/`data.sql`)
+- PostgreSQL 17 (Alpine) — one database per service, run in Docker
+- Schema created by SQL init scripts inside the DB containers; Hibernate `ddl-auto=none`
+  (no Flyway/Liquibase, no `schema.sql`/`data.sql`)
 - Apache Tika 2.9.2 (`tika-core` + `tika-parser-audiovideo-module`) for MP3 tag extraction
 - Spring `RestClient` for service-to-service calls
+- Two-stage Docker builds (Temurin Alpine), orchestrated with a single `compose.yaml`
 
 ## Project layout
 
 ```
 epam-microservices-task/
-├── resource-service/     # MP3 storage & processing (port 8081, DB localhost:5432/resource_db)
+├── init-scripts/
+│   ├── resource-db/init.sql   # CREATE TABLE resources (...)
+│   └── song-db/init.sql       # CREATE TABLE songs (...)
+├── resource-service/
 │   ├── src/
-│   └── pom.xml
-├── song-service/         # Song metadata (port 8082, DB localhost:5433/song_db)
+│   ├── pom.xml
+│   ├── Dockerfile             # two-stage build, EXPOSE 8081
+│   └── .dockerignore
+├── song-service/
 │   ├── src/
-│   └── pom.xml
-├── compose.yaml          # starts ONLY the two PostgreSQL databases
+│   ├── pom.xml
+│   ├── Dockerfile             # two-stage build, EXPOSE 8082
+│   └── .dockerignore
+├── compose.yaml               # DBs + both services, single-command bring-up
+├── .env                       # DB names/users/passwords + service URLs
 └── .gitignore
 ```
 
-The services run **locally** (not in Docker). Only the databases run in containers.
-
 ## Prerequisites
 
-- JDK 17+
-- Maven 3.9+
-- Docker (with Docker Compose) — this project was developed with OrbStack on macOS
+- Docker with Docker Compose (developed with **OrbStack** on macOS)
+- For local mode only: JDK 17+ and Maven 3.9+
+
+> **Apple Silicon note:** the task's recommended base images
+> (`maven:3.9-eclipse-temurin-17-alpine`, `eclipse-temurin:17-jre-alpine`) are published for
+> `linux/amd64` only, so on an ARM Mac the two service containers run under emulation. This is made
+> explicit with `platform: linux/amd64` on the service blocks in `compose.yaml`; everything works
+> unchanged, builds are just a little slower than native. (Verify emulation with
+> `docker run --rm --platform linux/amd64 alpine uname -m` → `x86_64`.)
 
 ## Running the system
 
-1. **Start the databases:**
+The **same** `application.yaml` works in both modes with no profile switching: container-specific
+values are injected as environment variables in Docker, and fall back to `localhost` defaults when
+run locally.
 
-   ```bash
-   docker compose up -d
-   ```
+### Docker mode (everything in containers)
 
-   This starts `resource-db` on `localhost:5432` and `song-db` on `localhost:5433`.
-   The database storage is ephemeral, so `docker compose down` fully resets the data.
+Build and start the databases and both services with a single command:
 
-2. **Build both services:**
+```bash
+docker compose up -d --build
+```
 
-   ```bash
-   mvn -f song-service/pom.xml -DskipTests package
-   mvn -f resource-service/pom.xml -DskipTests package
-   ```
+- `resource-db` → `localhost:5432`, `song-db` → `localhost:5433`
+- `resource-service` → `localhost:8081`, `song-service` → `localhost:8082`
+- Databases are created by `POSTGRES_DB`; tables are created by the mounted `init-scripts/*/init.sql`.
+- No data volume is used, so `docker compose down` fully resets the databases.
 
-3. **Run the services** (start the Song Service first, then the Resource Service):
+Check status and stop:
 
-   ```bash
-   java -jar song-service/target/song-service-1.0.0.jar
-   java -jar resource-service/target/resource-service-1.0.0.jar
-   ```
+```bash
+docker compose ps
+docker compose down
+```
 
-   Or, during development:
+### Local mode (services on the host, DBs in Docker)
 
-   ```bash
-   mvn -f song-service/pom.xml spring-boot:run
-   mvn -f resource-service/pom.xml spring-boot:run
-   ```
+Start only the databases in Docker, then run the services from the host:
 
-4. **Reset the databases** (clean slate for a fresh test run):
+```bash
+docker compose up -d resource-db song-db
 
-   ```bash
-   docker compose down && docker compose up -d
-   # then restart both services
-   ```
+# Start the Song Service first, then the Resource Service:
+mvn -f song-service/pom.xml spring-boot:run
+mvn -f resource-service/pom.xml spring-boot:run
+```
+
+The services use the `localhost:5432` / `localhost:5433` / `localhost:8082` defaults baked into
+`application.yaml`, so no configuration change is needed.
 
 ## API summary
 
@@ -129,4 +145,4 @@ npx newman run postman/introduction_to_microservices.postman_collection.json \
 > The original collection under `postman/` is never modified. In the Postman desktop app you simply
 > select the MP3 file for those requests via the file picker.
 
-All 382 assertions across 33 requests pass.
+All 382 assertions across 33 requests pass in **both** Docker mode and local mode.
