@@ -23,7 +23,6 @@ Thumbs.db
 logs/
 
 # Tooling
-.claude/
 
 # Local task materials (not part of the submission)
 TASK.md
