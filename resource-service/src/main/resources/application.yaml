@@ -21,6 +21,28 @@ spring:
       max-file-size: 25MB
       max-request-size: 25MB
 
-# Base URL of the Song Service used by the RestClient
+# Base URL of the Song Service used by the load-balanced RestClient.
+# The default is the LOGICAL service id (not a host:port): a @LoadBalanced
+# RestClient resolves "song-service" through Eureka and picks an instance,
+# so the same value works locally and in Docker. Overridable via env var.
 song-service:
-  base-url: ${SONG_SERVICE_URL:http://localhost:8082}
+  base-url: ${SONG_SERVICE_URL:http://song-service}
+
+# Eureka client. defaultZone points at the registry; the tip intervals below
+# speed up registration/discovery for local development and the demo.
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka}
+    # How often this client refreshes its local copy of the registry (default 30s).
+    registry-fetch-interval-seconds: 5
+  instance:
+    # Local default: register as "localhost" (prefer-ip-address false), which is
+    # reachable via loopback on ANY network — even a hotspot/VPN where the host's own
+    # LAN IP isn't reachable from itself. In Docker, compose sets
+    # EUREKA_PREFER_IP_ADDRESS=true so each container registers its own compose-network
+    # IP instead, giving distinct, directly reachable instances when song-service scales.
+    prefer-ip-address: ${EUREKA_PREFER_IP_ADDRESS:false}
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:localhost}
+    # How often this instance sends heartbeats to the server (default 30s).
+    lease-renewal-interval-in-seconds: 5
