@@ -6,17 +6,26 @@ import com.epam.microservices.song.entity.SongEntity;
 import com.epam.microservices.song.exception.SongAlreadyExistsException;
 import com.epam.microservices.song.exception.SongNotFoundException;
 import com.epam.microservices.song.repository.SongRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
 
 @Service
 public class SongService {
 
+    private static final Logger log = LoggerFactory.getLogger(SongService.class);
+
     private final SongRepository repository;
     private final IdParser idParser;
+    // Host name of this JVM. In Docker it is the container id, so it differs per
+    // song-service replica and makes client-side load balancing visible in logs.
+    private final String instanceId = resolveInstanceId();
 
     public SongService(SongRepository repository, IdParser idParser) {
         this.repository = repository;
@@ -35,7 +44,9 @@ public class SongService {
         entity.setAlbum(request.album());
         entity.setDuration(request.duration());
         entity.setYear(request.year());
-        return repository.save(entity).getId();
+        long id = repository.save(entity).getId();
+        log.info("[{}] Created song metadata id={}", instanceId, id);
+        return id;
     }
 
     @Transactional(readOnly = true)
@@ -56,7 +67,16 @@ public class SongService {
                 deletedIds.add(id);
             }
         }
+        log.info("[{}] Deleted song metadata ids={}", instanceId, deletedIds);
         return deletedIds;
+    }
+
+    private static String resolveInstanceId() {
+        try {
+            return InetAddress.getLocalHost().getHostName();
+        } catch (UnknownHostException e) {
+            return "unknown";
+        }
     }
 
     private SongResponse toResponse(SongEntity entity) {
