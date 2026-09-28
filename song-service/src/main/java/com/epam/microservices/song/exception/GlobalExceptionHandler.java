@@ -4,6 +4,7 @@ import com.epam.microservices.song.dto.ErrorResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -96,6 +97,16 @@ public class GlobalExceptionHandler {
         return json(HttpStatus.NOT_ACCEPTABLE)
                 .body(ErrorResponse.of("Requested media type is not acceptable",
                         String.valueOf(HttpStatus.NOT_ACCEPTABLE.value())));
+    }
+
+    /**
+     * An empty or non-JSON request body (e.g. {@code POST /songs} with no bytes)
+     * fails in the message converter before reaching the controller; map it to a
+     * clear 400 rather than 500.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleUnreadableBody(HttpMessageNotReadableException ex) {
+        return badRequest("Request body is missing or is not valid JSON");
     }
 
     @ExceptionHandler(Exception.class)
