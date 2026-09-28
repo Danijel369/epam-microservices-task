@@ -5,9 +5,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -51,6 +56,46 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleConflict(SongAlreadyExistsException ex) {
         return json(HttpStatus.CONFLICT)
                 .body(ErrorResponse.of(ex.getMessage(), String.valueOf(HttpStatus.CONFLICT.value())));
+    }
+
+    /**
+     * A known path hit with the wrong HTTP verb (e.g. {@code GET /songs}) is a
+     * client mistake, not a server fault — answer 405 instead of 500.
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
+        return json(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(ErrorResponse.of("Method " + ex.getMethod() + " is not supported for this endpoint",
+                        String.valueOf(HttpStatus.METHOD_NOT_ALLOWED.value())));
+    }
+
+    /**
+     * A required query parameter left off is a bad request, not a server fault.
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponse> handleMissingParam(MissingServletRequestParameterException ex) {
+        return badRequest("Required request parameter '" + ex.getParameterName() + "' is missing");
+    }
+
+    /**
+     * An unknown path (no handler / no static resource) is a 404, not a 500.
+     */
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    public ResponseEntity<ErrorResponse> handleUnknownPath(Exception ex) {
+        return json(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of("Endpoint not found",
+                        String.valueOf(HttpStatus.NOT_FOUND.value())));
+    }
+
+    /**
+     * The client's {@code Accept} header excludes every representation we can
+     * produce — that is a 406, not a server fault.
+     */
+    @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
+    public ResponseEntity<ErrorResponse> handleNotAcceptable(HttpMediaTypeNotAcceptableException ex) {
+        return json(HttpStatus.NOT_ACCEPTABLE)
+                .body(ErrorResponse.of("Requested media type is not acceptable",
+                        String.valueOf(HttpStatus.NOT_ACCEPTABLE.value())));
     }
 
     @ExceptionHandler(Exception.class)
